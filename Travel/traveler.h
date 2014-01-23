@@ -34,8 +34,17 @@ namespace World
 	{
 	public:
 		std::string name;
-		void move(void);
+		void move(const LLCoordinate &pos);
+		LLCoordinate &position = this->position_;
 	protected:
+		LLCoordinate position_;
+	};
+
+	class Town
+	{
+	public:
+		std::string name;
+		LLCoordinate position;
 	};
 }
 #endif
