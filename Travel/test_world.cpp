@@ -15,4 +15,6 @@ void TestLLCoordinate(void)
 int main(void)
 {
 	TestLLCoordinate();
+	World::Traveler tv1;
+	World::Town t1;
 }
