@@ -6,7 +6,7 @@
 #include <list>
 #include <atomic>
 
-namespace World
+namespace Travel
 {
 	// Forward Declaration.
 	//class LLCoordinate;
@@ -28,13 +28,13 @@ namespace World
 
 	// Converts DMS {degree, minute, second} to decimal degree.
 	// NOTE: If west, all variables must be negative values.
-	double dms2dec(double degree, double minute, double second = 0.0)
+	double dms2dec(double degree, double minute, double second = 0)
 	{
 		if ((degree >= 0 && minute >= 0 && second >= 0) ||
-			(degree < 0 && minute < 0 && second < 0))
+			(degree <= 0 && minute <= 0 && second <= 0))
 			return degree + (minute * 60 + second) / 3600;
 		else
-			throw std::logic_error(
+			throw std::invalid_argument(
 			"The signs of all {degree, minute, second} must be identical.");
 	}
 
@@ -96,51 +96,121 @@ namespace World
 	class Town
 	{
 	public:
+		Town(void) = default;
 		Town(const std::string &name, double latitude, double longitude);
 
-		// properties
-		std::string name;
-		//LLCoordinate coordinates;
+		// properties (never changed).
+		std::string &name = this->name_;
 		double &latitude = this->coordinates_.first;
 		double &longitude = this->coordinates_.second;
 
-		// (real-time) status
-		std::list<Traveler> travlers;
+		// (occasionally changed) status
+		std::list<std::reference_wrapper<Traveler>> travlers;
+
+		// methods.
+		double distance_to(const Town &dst) const;
 
 	protected:
+		// properties (never changed).
+		std::string name_;
 		std::pair<double, double> coordinates_;
 	};
 
-	Town::Town(const std::string &name, double latitude, double longitude) : name(name), coordinates_(latitude, longitude) {}
+	// A dummy variable as a default value.
+	Town nowhere;
+
+	Town::Town(const std::string &name, double latitude, double longitude) : name_(name), coordinates_(latitude, longitude) {}
+
+	double Town::distance_to(const Town &dst) const
+	{
+		return get_distance(this->latitude, this->longitude, dst.latitude, dst.longitude);
+	}
 
 	class Traveler
 	{
 	public:
 		Traveler(void) = default;
+		Traveler(const std::string &name);
 
-		// properties
-		std::string name;
-		double speed;		// distance(degree) / time (day)
+		// properties (never changed)
+		std::string &name = this->name_;
+		//double speed;		// distance(degree) / time (day)
 
-		// records
-		LLCoordinate destination;
-		Town last_town;
-		std::chrono::system_clock::time_point last_departure;
+		// (occasionally changed) status
+		//LLCoordinate destination;
+		std::reference_wrapper<Town> last_town;
+		std::reference_wrapper<const Town> next_town;
+		std::chrono::system_clock::time_point last_depart_time;
+		bool parked = true;
 
 		// (real-time) status
 		double speed_now;
 		double bearing_now;
-		//LLCoordinate position;		
-
 		double &latitude = this->position_.first;
 		double &longitude = this->position_.second;
 
+		// operators.
+		bool operator==(const Traveler &rhs) const;
+
+		// actions.
+		bool anchor(Town &town);
+		void depart(void);
+		void leave_for(const Town &town);
 		void move(const LLCoordinate &pos);
-		//LLCoordinate &position = this->position_;
 	protected:
-		//LLCoordinate position_;
+		// properties (never changed)
+		std::string name_ = "unknown";
+
+		// (real-time) status
 		std::pair<double, double> position_;
 	};
 
+	Traveler::Traveler(const std::string &name) : name_(name), last_town(nowhere), next_town(nowhere) {}
+
+	bool Traveler::operator==(const Traveler &rhs) const
+	{
+		// TODO: Use a unique ID instead of string.
+		return this->name == rhs.name;
+	}
+
+	bool Traveler::anchor(Town &town)
+	{
+		// TODO: Check the approximity of the position.
+		if (true)
+		{
+			this->last_town = town;
+			this->parked = true;
+			town.travlers.push_back(*this);
+			return true;
+		}
+		return false;
+	}
+
+	void Traveler::depart(void)
+	{
+		if (this->parked)
+		{
+			// Remove the travler from the parking lot.
+			Town &town = this->last_town.get();
+			town.travlers.remove_if([this](const Traveler &tv){ return tv == *this; });
+			this->last_depart_time = std::chrono::system_clock::now();
+			this->parked = false;
+		}
+		// No change, if not parked to a town.
+	}
+
+	void Traveler::leave_for(const Town &town)
+	{
+		if (this->parked)
+			this->depart();
+		this->next_town = town;
+	}
+
+	class World
+	{
+	public:
+		std::list<Traveler> travelers;
+		std::list<Town> towns;
+	};
 }
 #endif
