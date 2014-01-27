@@ -1,10 +1,14 @@
 #if !defined(TRAVELER_H)
 #define TRAVELER_H
 
-#include <string>
-#include <chrono>
-#include <list>
+#include <string>		// std::string
+#include <chrono>		// std::chrono::system_clock
+#include <list>			// std::list<T>
 #include <atomic>
+#include <algorithm>	// std::move()
+#include <cmath>		// std::atan(), ...
+#include <stdexcept>	// std::invalid_argument
+#include <functional>	// std::reference_wrapper<T>
 
 namespace Travel
 {
@@ -97,12 +101,16 @@ namespace Travel
 	{
 	public:
 		Town(void) = default;
+		Town(const Town &src);
+		Town(Town &&src);
+		Town &operator=(const Town &src);
+		Town &operator=(Town &&src) = delete;
 		Town(const std::string &name, double latitude, double longitude);
 
 		// properties (never changed).
-		std::string &name = this->name_;
 		double &latitude = this->coordinates_.first;
 		double &longitude = this->coordinates_.second;
+		std::string &name = this->name_;
 
 		// (occasionally changed) status
 		std::list<std::reference_wrapper<Traveler>> travlers;
@@ -112,24 +120,40 @@ namespace Travel
 
 	protected:
 		// properties (never changed).
-		std::string name_;
 		std::pair<double, double> coordinates_;
+		std::string name_;
 	};
 
 	// A dummy variable as a default value.
 	Town nowhere;
 
-	Town::Town(const std::string &name, double latitude, double longitude) : name_(name), coordinates_(latitude, longitude) {}
+	Town::Town(const Town &src) : coordinates_(src.coordinates_), name_(src.name_) {}
+
+	Town::Town(Town &&src) : coordinates_(std::move(src.coordinates_)),
+		name_(std::move(src.name_)) {}
+
+	Town &Town::operator=(const Town &src)
+	{
+		this->coordinates_ = src.coordinates_;
+		this->name_ = src.name_;
+		return *this;
+	}
+
+	Town::Town(const std::string &name, double latitude, double longitude) :
+		coordinates_(latitude, longitude), name_(name) {}
 
 	double Town::distance_to(const Town &dst) const
 	{
 		return get_distance(this->latitude, this->longitude, dst.latitude, dst.longitude);
 	}
 
+
 	class Traveler
 	{
 	public:
 		Traveler(void) = default;
+		Traveler(const Traveler &src);
+		Traveler(Traveler &&src);
 		Traveler(const std::string &name);
 
 		// properties (never changed)
@@ -139,15 +163,15 @@ namespace Travel
 		// (occasionally changed) status
 		//LLCoordinate destination;
 		std::reference_wrapper<Town> last_town;
-		std::reference_wrapper<const Town> next_town;
 		std::chrono::system_clock::time_point last_depart_time;
-		bool parked = true;
+		std::reference_wrapper<const Town> next_town;
+		bool parked;
 
 		// (real-time) status
-		double speed_now;
-		double bearing_now;
+		//double bearing_now;
 		double &latitude = this->position_.first;
 		double &longitude = this->position_.second;
+		//double speed_now;
 
 		// operators.
 		bool operator==(const Traveler &rhs) const;
@@ -165,7 +189,17 @@ namespace Travel
 		std::pair<double, double> position_;
 	};
 
-	Traveler::Traveler(const std::string &name) : name_(name), last_town(nowhere), next_town(nowhere) {}
+	Traveler::Traveler(const Traveler &src) : last_town(src.last_town),
+		last_depart_time(src.last_depart_time), next_town(src.next_town),
+		parked(src.parked), name_(src.name_), position_(src.position_) {}
+
+	Traveler::Traveler(Traveler &&src) : last_town(std::move(src.last_town)),
+		last_depart_time(std::move(src.last_depart_time)),
+		next_town(std::move(src.next_town)), parked(src.parked),
+		name_(std::move(src.name_)), position_(std::move(src.position_)) {}
+
+	Traveler::Traveler(const std::string &name) : last_town(nowhere), next_town(nowhere),
+		name_(name) {}
 
 	bool Traveler::operator==(const Traveler &rhs) const
 	{
@@ -206,11 +240,31 @@ namespace Travel
 		this->next_town = town;
 	}
 
+
 	class World
 	{
 	public:
-		std::list<Traveler> travelers;
+		World(void) = default;
+		World(const World&) = delete;
+		World(World &&) = delete;
+
+		//bool find_town(const std::string &name, Town &town);
+		//Traveler &find_traveler(const std::string &name) const;
+
 		std::list<Town> towns;
+		std::list<Traveler> travelers;
 	};
+
+	//bool World::find_town(const std::string &name, Town &town)
+	//{
+	//	std::list<Town>::iterator it = std::find_if(this->towns.begin(), this->towns.end(), [name](const Town &t){ return t.name == name; });
+	//	if (it == this->towns.end())
+	//		return false;
+	//	else
+	//	{
+	//		town = *it;
+	//		return true;
+	//	}
+	//}
 }
 #endif
