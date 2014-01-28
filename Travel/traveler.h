@@ -17,6 +17,8 @@ namespace Travel
 	class Traveler;
 	//class Town;
 
+	// constexpr is NOT supported by VS2013.
+	//constexpr double PI = std::atan(1) * 4;	// (radian)
 	const double PI = std::atan(1) * 4;	// (radian)
 	const double EARTH_RADIUS = 6371;	// (km)
 
@@ -158,7 +160,7 @@ namespace Travel
 
 		// properties (never changed)
 		std::string &name = this->name_;
-		//double speed;		// distance(degree) / time (day)
+		double &speed_cruise = this->speed_cruise_;
 
 		// (occasionally changed) status
 		//LLCoordinate destination;
@@ -171,7 +173,8 @@ namespace Travel
 		//double bearing_now;
 		double &latitude = this->position_.first;
 		double &longitude = this->position_.second;
-		//double speed_now;
+		double speed = 0.0;		// (km/hr)
+		std::chrono::system_clock::time_point time_last;
 
 		// operators.
 		bool operator==(const Traveler &rhs) const;
@@ -181,9 +184,11 @@ namespace Travel
 		void depart(void);
 		void leave_for(const Town &town);
 		void move(const LLCoordinate &pos);
+		void update(void);
 	protected:
 		// properties (never changed)
 		std::string name_ = "unknown";
+		double speed_cruise_ = 0.0;		// (km/hr)
 
 		// (real-time) status
 		std::pair<double, double> position_;
@@ -191,12 +196,14 @@ namespace Travel
 
 	Traveler::Traveler(const Traveler &src) : last_town(src.last_town),
 		last_depart_time(src.last_depart_time), next_town(src.next_town),
-		parked(src.parked), name_(src.name_), position_(src.position_) {}
+		parked(src.parked), name_(src.name_), speed_cruise_(src.speed_cruise_),
+		position_(src.position_) {}
 
 	Traveler::Traveler(Traveler &&src) : last_town(std::move(src.last_town)),
 		last_depart_time(std::move(src.last_depart_time)),
 		next_town(std::move(src.next_town)), parked(src.parked),
-		name_(std::move(src.name_)), position_(std::move(src.position_)) {}
+		name_(std::move(src.name_)), speed_cruise_(src.speed_cruise_),
+		position_(std::move(src.position_)) {}
 
 	Traveler::Traveler(const std::string &name) : last_town(nowhere), next_town(nowhere),
 		name_(name) {}
@@ -214,6 +221,8 @@ namespace Travel
 		{
 			this->last_town = town;
 			this->parked = true;
+			this->latitude = town.latitude;
+			this->longitude = town.longitude;
 			town.travlers.push_back(*this);
 			return true;
 		}
@@ -238,6 +247,20 @@ namespace Travel
 		if (this->parked)
 			this->depart();
 		this->next_town = town;
+		this->time_last = std::chrono::system_clock::now();
+		this->speed = this->speed_cruise;
+		//auto &last_town = this->last_town.get();
+		//double dist = last_town.distance_to(town);
+		//double time_est = dist / this->speed_cruise;	// (hr)
+		//auto num_samples = static_cast<long long>(time_est / this->sample_time_);
+	}
+
+	void Traveler::update(void)
+	{
+		// Get new position from {speed, time_last, now(), bearing, position_}.
+
+		// Update time_last, position_
+		this->time_last = std::chrono::system_clock::now();
 	}
 
 
