@@ -21,6 +21,7 @@ namespace Travel
 	//constexpr double PI = std::atan(1) * 4;	// (radian)
 	const double PI = std::atan(1) * 4;	// (radian)
 	const double EARTH_RADIUS = 6371;	// (km)
+	const double TIME_FACTOR = 100.0;	// (X)
 
 	double degree2rad(double degree)
 	{
@@ -258,15 +259,20 @@ namespace Travel
 	void Traveler::update(void)
 	{
 		// Get new position from {speed, time_last, now(), bearing, position_}.
+		auto now = std::chrono::system_clock::now();
+		auto t = this->time_last - now;
+		auto hrs_sys = std::chrono::duration<double, std::ratio<3600>>(t);	// sec -> hrs
+		auto hrs = hrs_sys * TIME_FACTOR;			// (sim hrs)
+		auto distance = this->speed * hrs;			// (km)
 
 		// Update time_last, position_
-		this->time_last = std::chrono::system_clock::now();
+		this->time_last = now;
 	}
 
 
 	class World
 	{
-	public:
+	public:		
 		World(void) = default;
 		World(const World&) = delete;
 		World(World &&) = delete;
