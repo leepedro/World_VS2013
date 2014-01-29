@@ -46,6 +46,11 @@ int main(void)
 	auto &traveler1 = *std::find_if(world.travelers.begin(), world.travelers.end(), [](const Traveler &t){ return t.name == "me"; });
 	auto &traveler2 = *std::find_if(world.travelers.begin(), world.travelers.end(), [](const Traveler &t){ return t.name == "you"; });
 
+	traveler1.latitude = town1.latitude - 0.1;
+	traveler1.longitude = town1.longitude - 0.1;
+	traveler2.latitude = town2.latitude + 0.1;
+	traveler2.longitude = town2.longitude + 0.1;
+
 	// serial work flow.
 	//traveler1.anchor(town1);
 	//traveler2.anchor(town2);
@@ -68,4 +73,6 @@ int main(void)
 	//std::list<Traveler>::iterator it = std::find_if(world.travelers.begin(), world.travelers.end(), [](const Traveler &tv){ return tv.name == "you_"; });
 	//if (it == world.travelers.end())
 	//	std::cout << "There is no match." << std::endl;
+
+	// There will be a couple of threads for traveler update (as a group), and another thread for town update.
 }
