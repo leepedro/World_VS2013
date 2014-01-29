@@ -20,7 +20,7 @@ namespace Travel
 	// constexpr is NOT supported by VS2013.
 	//constexpr double PI = std::atan(1) * 4;	// (radian)
 	const double PI = std::atan(1) * 4;	// (radian)
-	const double EARTH_RADIUS = 6371;	// (km)
+	const double EARTH_RADIUS = 6371;	// mean earth radius (km)
 	const double TIME_FACTOR = 100.0;	// (X)
 
 	double degree2rad(double degree)
@@ -45,8 +45,8 @@ namespace Travel
 			"The signs of all {degree, minute, second} must be identical.");
 	}
 
-	// Compute the distance (km) between two geo-positions (degree) using Spherical law of
-	// Cosines with mean earth radius.
+	// Compute the great-circle distance or orthodromic distance (km) between two
+	// geo-positions (degree) using Spherical law of Cosines with mean earth radius.
 	double get_dist_LL2km(double lat1, double lon1, double lat2, double lon2)
 	{
 		double lat1_r = degree2rad(lat1);
@@ -60,7 +60,43 @@ namespace Travel
 	void get_pos_LL(double lat1, double lon1, double lat2, double lon2, double speed, double t,
 		double &lat_now, double &lon_now)
 	{
-		// TODO:
+		double la_1 = degree2rad(lat1);
+		double la_2 = degree2rad(lat2);
+		double lo_12 = degree2rad(lon2 - lon1);
+		using namespace std;
+		
+		// bearing at point 1 and reference point 0 at the equator.
+		double b_1 = atan2(sin(lo_12), cos(la_1) * tan(la_2) - sin(la_1) * cos(lo_12));
+		double b_0 = atan2(sin(b_1) * cos(la_1), sqrt(cos(b_1) * cos(b_1) + sin(b_1) * sin(b_1) * sin(la_1) * sin(la_1)));
+
+		// angular distance from the reference point 0.
+		double ad_1 = atan2(tan(la_1), cos(b_1));
+		double ad_dt = speed * t / EARTH_RADIUS;
+		double ad = ad_1 + ad_dt;
+
+		// current latitude
+		double la = atan2(cos(b_0) * sin(ad), sqrt(cos(ad) * cos(ad) + sin(b_0) * sin(b_0) * sin(ad) * sin(ad)));
+
+		// current longitude
+		double lo_01 = atan2(sin(b_0) * sin(ad_1), cos(ad_1));
+		double lo_0 = degree2rad(lon1) - lo_01;
+		double lo = atan2(sin(b_0) * sin(ad), cos(ad)) + lo_0;
+
+		// current bearing
+		double b = atan2(tan(b_0), cos(ad));
+
+		lat_now = rad2degree(la);
+		lon_now = rad2degree(lo);
+	}
+
+	double get_bearing_(double lat1, double lon1, double lat2, double lon2)
+	{
+		double lat1_r = degree2rad(lat1);
+		double lat2_r = degree2rad(lat2);
+		double diff_lon = degree2rad(lon2 - lon1);
+		using namespace std;
+		return atan2(std::sin(diff_lon) * cos(lat2_r),
+			cos(lat1_r) * sin(lat2_r) - sin(lat1_r) * cos(lat2_r) * cos(diff_lon));
 	}
 
 	double get_bearing(double lat1, double lon1, double lat2, double lon2)
