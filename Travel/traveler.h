@@ -337,6 +337,7 @@ namespace Travel
 
 		bool find_town(const std::string &name, std::list<Town>::iterator &it);
 		bool find_traveler(const std::string &name, std::list<Traveler>::iterator &it);
+		void update_travelers(void);
 
 		std::list<Town> towns;
 		std::list<Traveler> travelers;
@@ -358,6 +359,12 @@ namespace Travel
 			return false;
 		else
 			return true;
+	}
+
+	void World::update_travelers(void)
+	{
+		for (Traveler &tv : this->travelers)
+			tv.update();
 	}
 }
 #endif

@@ -8,13 +8,14 @@
 void action1(Travel::Traveler &traveler, Travel::Town &town1, Travel::Town &town2)
 {
 	std::clog << "action1 started by thread(" << std::this_thread::get_id() << ")" << std::endl;
-	if (!traveler.anchor(town1))
-	{	// If failed, try one more time and wait.
-		std::this_thread::sleep_for(std::chrono::seconds(2));
+	//if (!traveler.anchor(town1))
+	//{	// If failed, try one more time and wait.
+	//	std::this_thread::sleep_for(std::chrono::seconds(2));
 
-		auto future = std::async(std::launch::async, &Travel::Traveler::anchor, std::ref(traveler), std::ref(town1));
-		future.wait_for(std::chrono::seconds(1));
-	}
+	//	auto future = std::async(std::launch::async, &Travel::Traveler::anchor, std::ref(traveler), std::ref(town1));
+	//	future.wait_for(std::chrono::seconds(1));
+	//}
+	traveler.anchor(town1);
 	traveler.leave_for(town2);
 	traveler.anchor(town2);
 	std::clog << "action1 finished by thread(" << std::this_thread::get_id() << ")" << std::endl;
@@ -62,10 +63,23 @@ int main(void)
 		//th2.join();
 
 		// parallel work flow using std::async
-		auto h1 = std::async(std::launch::async, action1, std::ref(traveler1), std::ref(town1), std::ref(town2));
+		// Place two travelers at two towns.
+		auto h1 = std::async(std::launch::async, &Traveler::anchor, std::ref(traveler1), std::ref(town1));
+		//auto h1 = std::async(std::launch::async, action1, std::ref(traveler1), std::ref(town1), std::ref(town2));
 		auto h2 = std::async(std::launch::async, &Traveler::anchor, std::ref(traveler2), std::ref(town2));
 		h1.wait();
 		h2.wait();
+		// One traveler leaves a town for another town, and the status of all travelers are continuously updated.
+		std::async(std::launch::async, &Traveler::leave_for, std::ref(traveler1), std::ref(town2));
+		auto future = std::async(std::launch::async, [](){ std::this_thread::sleep_for(std::chrono::seconds(10)); });	// Stop update after 10 sec.
+		std::future_status status;
+		do
+		{
+			status = future.wait_for(std::chrono::seconds(1));	// update every second.
+		} while (status != std::future_status::ready);
+
+		auto h3 = std::async(std::launch::async, &World::update_travelers, std::ref(world));
+		h3.wait();
 	}
 
 	//auto &town1 = *std::find_if(world.towns.begin(), world.towns.end(), [](const Town &t){ return t.name == "San Jose"; });
