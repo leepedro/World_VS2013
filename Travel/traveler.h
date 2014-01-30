@@ -21,7 +21,7 @@ namespace Travel
 	//constexpr double PI = std::atan(1) * 4;	// (radian)
 	const double PI = std::atan(1) * 4;	// (radian)
 	const double EARTH_RADIUS = 6371;	// mean earth radius (km)
-	const double TIME_FACTOR = 100.0;	// (X)
+	const double TIME_FACTOR = 3600.0;	// sim hr -> sec
 
 	double degree2rad(double degree)
 	{
@@ -58,12 +58,13 @@ namespace Travel
 	}
 
 	void get_pos_LL(double lat1, double lon1, double lat2, double lon2, double speed, double t,
-		double &lat_now, double &lon_now)
+		double &lat, double &lon, double &azi)
 	{
 		double la_1 = degree2rad(lat1);
 		double la_2 = degree2rad(lat2);
 		double lo_12 = degree2rad(lon2 - lon1);
 		using namespace std;
+		// NOTE: atan2 returns [-pi, ..., pi].
 		
 		// bearing at point 1 and reference point 0 at the equator.
 		double b_1 = atan2(sin(lo_12), cos(la_1) * tan(la_2) - sin(la_1) * cos(lo_12));
@@ -76,6 +77,7 @@ namespace Travel
 
 		// current latitude
 		double la = atan2(cos(b_0) * sin(ad), sqrt(cos(ad) * cos(ad) + sin(b_0) * sin(b_0) * sin(ad) * sin(ad)));
+		assert(la >= -PI / 2 && la <= PI / 2);
 
 		// current longitude
 		double lo_01 = atan2(sin(b_0) * sin(ad_1), cos(ad_1));
@@ -85,8 +87,9 @@ namespace Travel
 		// current bearing
 		double b = atan2(tan(b_0), cos(ad));
 
-		lat_now = rad2degree(la);
-		lon_now = rad2degree(lo);
+		lat = rad2degree(la);
+		lon = rad2degree(lo);
+		azi = fmod(rad2degree(b) + 360, 360);	// (-pi, ..., pi] -> [0, ..., 360)
 	}
 
 	double get_bearing_(double lat1, double lon1, double lat2, double lon2)
@@ -107,7 +110,7 @@ namespace Travel
 		using namespace std;
 		double bearing_r = atan2(std::sin(diff_lon) * cos(lat2_r),
 			cos(lat1_r) * sin(lat2_r) - sin(lat1_r) * cos(lat2_r) * cos(diff_lon));
-		return fmod(rad2degree(bearing_r) + 180, 360);	// [-pi, ..., pi] -> [0, ..., 360).
+		return fmod(rad2degree(bearing_r) + 360, 360);	// (-pi, ..., pi] -> [0, ..., 360)
 	}
 
 	class LLCoordinate
@@ -294,16 +297,16 @@ namespace Travel
 		// No change, if not parked to a town.
 	}
 
-	void Traveler::leave_for(const Town &town)
+	void Traveler::leave_for(const Town &dst)
 	{
 		this->depart();
-		this->next_town = town;
+		this->next_town = dst;
 		this->time_last = std::chrono::system_clock::now();
 		this->speed = this->speed_cruise;
-		//auto &last_town = this->last_town.get();
-		//double dist = last_town.distance_to(town);
+
+		//auto &orgn = this->last_town.get();
+		//double dist = orgn.distance_to(dst);			// (km)
 		//double time_est = dist / this->speed_cruise;	// (hr)
-		//auto num_samples = static_cast<long long>(time_est / this->sample_time_);
 	}
 
 	void Traveler::update(void)
@@ -319,7 +322,8 @@ namespace Travel
 		this->time_last = now;
 		auto dst = this->next_town.get();
 		std::pair<double, double> pos_now;
-		get_pos_LL(this->latitude, this->longitude, dst.latitude, dst.longitude, this->speed, hrs, pos_now.first, pos_now.second);
+		double azimuth;
+		get_pos_LL(this->latitude, this->longitude, dst.latitude, dst.longitude, this->speed, hrs, pos_now.first, pos_now.second, azimuth);
 		this->coordinates_ = pos_now;
 	}
 
@@ -331,23 +335,29 @@ namespace Travel
 		World(const World&) = delete;
 		World(World &&) = delete;
 
-		//bool find_town(const std::string &name, Town &town);
-		//Traveler &find_traveler(const std::string &name) const;
+		bool find_town(const std::string &name, std::list<Town>::iterator &it);
+		bool find_traveler(const std::string &name, std::list<Traveler>::iterator &it);
 
 		std::list<Town> towns;
 		std::list<Traveler> travelers;
 	};
 
-	//bool World::find_town(const std::string &name, Town &town)
-	//{
-	//	std::list<Town>::iterator it = std::find_if(this->towns.begin(), this->towns.end(), [name](const Town &t){ return t.name == name; });
-	//	if (it == this->towns.end())
-	//		return false;
-	//	else
-	//	{
-	//		town = *it;
-	//		return true;
-	//	}
-	//}
+	bool World::find_town(const std::string &name, std::list<Town>::iterator &it)
+	{
+		it = std::find_if(this->towns.begin(), this->towns.end(), [name](const Town &t){ return t.name == name; });
+		if (it == this->towns.end())
+			return false;
+		else
+			return true;
+	}
+
+	bool World::find_traveler(const std::string &name, std::list<Traveler>::iterator &it)
+	{
+		it = std::find_if(this->travelers.begin(), this->travelers.end(), [name](const Traveler &t){ return t.name == name; });
+		if (it == this->travelers.end())
+			return false;
+		else
+			return true;
+	}
 }
 #endif
