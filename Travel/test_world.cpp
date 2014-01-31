@@ -1,5 +1,4 @@
 #include <iostream>
-//#include <vector>
 #include <thread>		// std::thread()
 #include <future>		// std::async()
 
@@ -7,26 +6,131 @@
 
 void action1(Travel::Traveler &traveler, Travel::Town &town1, Travel::Town &town2)
 {
-	std::clog << "action1 started by thread(" << std::this_thread::get_id() << ")" << std::endl;
-	//if (!traveler.anchor(town1))
-	//{	// If failed, try one more time and wait.
-	//	std::this_thread::sleep_for(std::chrono::seconds(2));
-
-	//	auto future = std::async(std::launch::async, &Travel::Traveler::anchor, std::ref(traveler), std::ref(town1));
-	//	future.wait_for(std::chrono::seconds(1));
-	//}
 	traveler.anchor(town1);
+	if (traveler.anchor(town1))
+		std::clog << traveler.name << " is parked at " << town1.name << std::endl;
+	else
+		std::clog << traveler.name << " is NOT parked at " << town1.name << std::endl;
+	traveler.speed = 1224.0;	// (km/h)
 	traveler.leave_for(town2);
-	traveler.anchor(town2);
-	std::clog << "action1 finished by thread(" << std::this_thread::get_id() << ")" << std::endl;
+	std::clog << traveler.name << " is leaving for " << traveler.next_town.get().name << " with " << traveler.speed << "km/hr" << std::endl;
 }
+
+// Use async for only timer.
+void run_serial(Travel::World &world, Travel::Traveler &traveler1, Travel::Traveler &traveler2, Travel::Town &town1, Travel::Town &town2)
+{
+	std::cout << std::endl << "Use std::async for only timer." << std::endl << std::endl;
+	using namespace Travel;
+
+	// Place travelers at the initial position.
+	traveler1.latitude = town1.latitude - 0.1;
+	traveler1.longitude = town1.longitude - 0.1;
+	traveler2.latitude = town2.latitude + 0.1;
+	traveler2.longitude = town2.longitude + 0.1;
+
+	// One traveler parks at a town.
+	if (traveler1.anchor(town1))
+		std::clog << traveler1.name << " is parked at " << town1.name << std::endl;
+	else
+		std::clog << traveler1.name << " is NOT parked at " << town1.name << std::endl;
+
+	// One traveler parks at a town.
+	if (traveler2.anchor(town2))
+		std::clog << traveler2.name << " is parked at " << town2.name << std::endl;
+	else
+		std::clog << traveler2.name << " is NOT parked at " << town2.name << std::endl;
+
+	// One traveler leaves a town for another town.
+	traveler1.speed = 1224.0;	// (km/h)
+	traveler1.leave_for(town2);
+	std::clog << traveler1.name << " is leaving for " << traveler1.next_town.get().name << " with " << traveler1.speed << "km/hr" << std::endl;
+
+	// The status of all travelers are continuously updated.
+	auto stop = std::async(std::launch::async, [](){ std::this_thread::sleep_for(std::chrono::seconds(3)); });
+	while (stop.wait_for(std::chrono::milliseconds(1)) != std::future_status::ready)
+		world.update_travelers();
+
+	if (traveler1.parked)
+		std::clog << traveler1.name << " has arrived at " << traveler1.last_town.get().name << std::endl;
+	else
+		std::clog << traveler1.name << " has NOT arrived at " << traveler1.next_town.get().name << std::endl;
+}
+
+// Use async for each traveler.
+void run_parallel_async(Travel::World &world, Travel::Traveler &traveler1, Travel::Traveler &traveler2, Travel::Town &town1, Travel::Town &town2)
+{
+	std::cout << std::endl << "Use std::async for timer and each traveler." << std::endl << std::endl;
+	using namespace Travel;
+
+	// Place travelers at the initial position.
+	traveler1.latitude = town1.latitude - 0.1;
+	traveler1.longitude = town1.longitude - 0.1;
+	traveler2.latitude = town2.latitude + 0.1;
+	traveler2.longitude = town2.longitude + 0.1;
+
+	// One traveler parks at a town, and then leaves for another town.
+	auto h1 = std::async(std::launch::async, action1, std::ref(traveler1), std::ref(town1), std::ref(town2));
+
+	// One traveler parks at a town.
+	auto h2 = std::async(std::launch::async, &Traveler::anchor, std::ref(traveler2), std::ref(town2));
+
+	// The status of all travelers are continuously updated.
+	auto stop = std::async(std::launch::async, [](){ std::this_thread::sleep_for(std::chrono::seconds(3)); });
+	while (stop.wait_for(std::chrono::milliseconds(1)) != std::future_status::ready)
+		world.update_travelers();
+
+	if (traveler1.parked)
+		std::clog << traveler1.name << " has arrived at " << traveler1.last_town.get().name << std::endl;
+	else
+		std::clog << traveler1.name << " has NOT arrived at " << traveler1.next_town.get().name << std::endl;
+	h1.wait();
+
+	if (h2.get())
+		std::clog << traveler2.name << " is parked at " << traveler2.last_town.get().name << std::endl;
+	else
+		std::clog << traveler2.name << " is NOT parked at " << traveler2.next_town.get().name << std::endl;
+}
+
+// Use thread for each traveler and async for timer.
+void run_parallel_thread(Travel::World &world, Travel::Traveler &traveler1, Travel::Traveler &traveler2, Travel::Town &town1, Travel::Town &town2)
+{
+	std::cout << std::endl << "Use std::thread for each traveler and std::async for timer." << std::endl << std::endl;
+	using namespace Travel;
+
+	// Place travelers at the initial position.
+	traveler1.latitude = town1.latitude - 0.1;
+	traveler1.longitude = town1.longitude - 0.1;
+	traveler2.latitude = town2.latitude + 0.1;
+	traveler2.longitude = town2.longitude + 0.1;
+
+	// One traveler parks at a town, and then leaves for another town.
+	std::thread th1(action1, std::ref(traveler1), std::ref(town1), std::ref(town2));
+
+	// One traveler parks at a town.
+	std::thread th2(&Traveler::anchor, std::ref(traveler2), std::ref(town2));
+
+	// The status of all travelers are continuously updated.
+	auto stop = std::async(std::launch::async, [](){ std::this_thread::sleep_for(std::chrono::seconds(3)); });
+	while (stop.wait_for(std::chrono::milliseconds(1)) != std::future_status::ready)
+		world.update_travelers();
+
+	if (traveler1.parked)
+		std::clog << traveler1.name << " has arrived at " << traveler1.last_town.get().name << std::endl;
+	else
+		std::clog << traveler1.name << " has NOT arrived at " << traveler1.next_town.get().name << std::endl;
+	th1.join();
+
+	if (traveler2.parked)
+		std::clog << traveler2.name << " is parked at " << traveler2.last_town.get().name << std::endl;
+	else
+		std::clog << traveler2.name << " is NOT parked at " << traveler2.next_town.get().name << std::endl;
+	th2.join();
+}
+
 
 int main(void)
 {	
 	using namespace Travel;
-
-	double lat, lon, azi;
-	get_pos_LL(-33, -71.6, 31.4, 121.8, 18743, 0.5, lat, lon, azi);
 
 	World world;
 	world.travelers.push_back(Traveler("me"));
@@ -45,75 +149,9 @@ int main(void)
 		auto &traveler1 = *it_traveler_1;
 		auto &traveler2 = *it_traveler_2;
 
-		traveler1.latitude = town1.latitude - 0.1;
-		traveler1.longitude = town1.longitude - 0.1;
-		traveler2.latitude = town2.latitude + 0.1;
-		traveler2.longitude = town2.longitude + 0.1;
+		run_serial(world, traveler1, traveler2, town1, town2);
+		run_parallel_async(world, traveler1, traveler2, town1, town2);
+		run_parallel_thread(world, traveler1, traveler2, town1, town2);
 
-		// serial work flow.
-		//traveler1.anchor(town1);
-		//traveler2.anchor(town2);
-		//traveler1.leave_for(town2);
-		//traveler1.anchor(town2);
-
-		// parallel work flow using std::thread
-		//std::thread th1(action1, std::ref(traveler1), std::ref(town1), std::ref(town2));
-		//std::thread th2(&Traveler::anchor, std::ref(traveler2), std::ref(town2));
-		//th1.join();
-		//th2.join();
-
-		// parallel work flow using std::async
-		// Place two travelers at two towns.
-		auto h1 = std::async(std::launch::async, &Traveler::anchor, std::ref(traveler1), std::ref(town1));
-		//auto h1 = std::async(std::launch::async, action1, std::ref(traveler1), std::ref(town1), std::ref(town2));
-		auto h2 = std::async(std::launch::async, &Traveler::anchor, std::ref(traveler2), std::ref(town2));
-		h1.wait();
-		h2.wait();
-		// One traveler leaves a town for another town, and the status of all travelers are continuously updated.
-		std::async(std::launch::async, &Traveler::leave_for, std::ref(traveler1), std::ref(town2));
-		auto future = std::async(std::launch::async, [](){ std::this_thread::sleep_for(std::chrono::seconds(10)); });	// Stop update after 10 sec.
-		std::future_status status;
-		do
-		{
-			status = future.wait_for(std::chrono::seconds(1));	// update every second.
-		} while (status != std::future_status::ready);
-
-		auto h3 = std::async(std::launch::async, &World::update_travelers, std::ref(world));
-		h3.wait();
 	}
-
-	//auto &town1 = *std::find_if(world.towns.begin(), world.towns.end(), [](const Town &t){ return t.name == "San Jose"; });
-	//auto &town2 = *std::find_if(world.towns.begin(), world.towns.end(), [](const Town &t){ return t.name == "Dayton"; });
-	//auto &traveler1 = *std::find_if(world.travelers.begin(), world.travelers.end(), [](const Traveler &t){ return t.name == "me"; });
-	//auto &traveler2 = *std::find_if(world.travelers.begin(), world.travelers.end(), [](const Traveler &t){ return t.name == "you"; });
-
-	//traveler1.latitude = town1.latitude - 0.1;
-	//traveler1.longitude = town1.longitude - 0.1;
-	//traveler2.latitude = town2.latitude + 0.1;
-	//traveler2.longitude = town2.longitude + 0.1;
-
-	// serial work flow.
-	//traveler1.anchor(town1);
-	//traveler2.anchor(town2);
-	//traveler1.leave_for(town2);
-	//traveler1.anchor(town2);
-
-	// parallel work flow using std::thread
-	//std::thread th1(action1, std::ref(traveler1), std::ref(town1), std::ref(town2));
-	//std::thread th2(&Traveler::anchor, std::ref(traveler2), std::ref(town2));
-	//th1.join();
-	//th2.join();
-
-	// parallel work flow using std::async
-	//auto h1 = std::async(std::launch::async, action1, std::ref(traveler1), std::ref(town1), std::ref(town2));
-	//auto h2 = std::async(std::launch::async, &Traveler::anchor, std::ref(traveler2), std::ref(town2));
-	//h1.wait();
-	//h2.wait();
-
-	//Traveler &tv2 = *std::find_if(world.travelers.begin(), world.travelers.end(), [](const Traveler &tv){ return tv.name == "you"; });
-	//std::list<Traveler>::iterator it = std::find_if(world.travelers.begin(), world.travelers.end(), [](const Traveler &tv){ return tv.name == "you_"; });
-	//if (it == world.travelers.end())
-	//	std::cout << "There is no match." << std::endl;
-
-	// There will be a couple of threads for traveler update (as a group), and another thread for town update.
 }

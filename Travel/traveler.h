@@ -6,7 +6,7 @@
 #include <list>			// std::list<T>
 #include <atomic>
 #include <algorithm>	// std::move()
-#include <cmath>		// std::atan(), ...
+#include <cmath>		// std::atan2(), ...
 #include <stdexcept>	// std::invalid_argument
 #include <functional>	// std::reference_wrapper<T>
 
@@ -21,7 +21,7 @@ namespace Travel
 	//constexpr double PI = std::atan(1) * 4;	// (radian)
 	const double PI = std::atan(1) * 4;	// (radian)
 	const double EARTH_RADIUS = 6371;	// mean earth radius (km)
-	const double TIME_FACTOR = 3600.0;	// sim hr -> sec
+	const double TIME_FACTOR = 3600.0;	// sim hour ~= sec
 
 	double degree2rad(double degree)
 	{
@@ -45,9 +45,10 @@ namespace Travel
 			"The signs of all {degree, minute, second} must be identical.");
 	}
 
-	// Compute the great-circle distance or orthodromic distance (km) between two
-	// geo-positions (degree) using Spherical law of Cosines with mean earth radius.
-	double get_dist_LL2km(double lat1, double lon1, double lat2, double lon2)
+	// Computes the great-circle distance or orthodromic distance (km) between two
+	// geo-positions as (latitude, longitude) using Spherical law of Cosines with mean earth
+	// radius. All coordinates are in degree.
+	double get_distance(double lat1, double lon1, double lat2, double lon2)
 	{
 		double lat1_r = degree2rad(lat1);
 		double lat2_r = degree2rad(lat2);
@@ -57,7 +58,9 @@ namespace Travel
 			EARTH_RADIUS;
 	}
 
-	void get_pos_LL(double lat1, double lon1, double lat2, double lon2, double speed, double t,
+	// Computes the current geo-position as (latitude, longitude) based on the origin, intended
+	// destination, and the surface distance(km). All coordinates are in degree.
+	void get_position(double lat1, double lon1, double lat2, double lon2, double dist,
 		double &lat, double &lon, double &azi)
 	{
 		double la_1 = degree2rad(lat1);
@@ -72,7 +75,7 @@ namespace Travel
 
 		// angular distance from the reference point 0.
 		double ad_1 = atan2(tan(la_1), cos(b_1));
-		double ad_dt = speed * t / EARTH_RADIUS;
+		double ad_dt = dist / EARTH_RADIUS;
 		double ad = ad_1 + ad_dt;
 
 		// current latitude
@@ -118,8 +121,6 @@ namespace Travel
 	public:
 		double latitude;	// horizontal lines presenting north(+) and south(-).
 		double longitude;	// vertical lines presenting east(+) and west(-).
-		//double &lambda = this->longitude;
-		//double &phi = this->latitude;
 		void correct(void);
 	protected:
 		static double correct_latitude(double value);
@@ -145,6 +146,8 @@ namespace Travel
 		return temp > 180 ? temp - 360 : (temp <= -180 ? temp + 360 : temp);
 	}
 
+	////////////////////////////////////////////////////////////////////////////////////////
+	// Town
 	class Town
 	{
 	public:
@@ -157,34 +160,33 @@ namespace Travel
 
 		// properties (never changed).
 		const std::pair<double, double> &coordinate = this->coordinates_;
-		double &latitude = this->coordinates_.first;
-		double &longitude = this->coordinates_.second;
+		const double &latitude = this->coordinates_.first;
+		const double &longitude = this->coordinates_.second;
 		const std::string &name = this->name_;
 
 		// (occasionally changed) status
-		std::list<std::reference_wrapper<Traveler>> travlers;
 		bool can_park = true;
+		std::list<std::reference_wrapper<Traveler>> travelers;
 
 		// methods.
 		double distance_to(const Town &dst) const;
-		bool is_close(const std::pair<double, double> &pos) const;
 
 	protected:
 		// properties (never changed).
 		std::pair<double, double> coordinates_;
-		std::string name_;
+		std::string name_ = "unknown";
 	};
 
-	// A dummy variable as a default value.
-	Town nowhere;
+	Town::Town(const Town &src) : can_park(src.can_park), travelers(src.travelers),
+		coordinates_(src.coordinates_), name_(src.name_) {}
 
-	Town::Town(const Town &src) : coordinates_(src.coordinates_), name_(src.name_) {}
-
-	Town::Town(Town &&src) : coordinates_(std::move(src.coordinates_)),
-		name_(std::move(src.name_)) {}
+	Town::Town(Town &&src) : can_park(src.can_park), travelers(std::move(src.travelers)),
+		coordinates_(std::move(src.coordinates_)), name_(std::move(src.name_)) {}
 
 	Town &Town::operator=(const Town &src)
 	{
+		this->can_park = src.can_park;
+		this->travelers = src.travelers;
 		this->coordinates_ = src.coordinates_;
 		this->name_ = src.name_;
 		return *this;
@@ -195,17 +197,18 @@ namespace Travel
 
 	double Town::distance_to(const Town &dst) const
 	{
-		return get_dist_LL2km(this->latitude, this->longitude, dst.latitude, dst.longitude);
+		return get_distance(this->latitude, this->longitude, dst.latitude, dst.longitude);
 	}
 
-	bool Town::is_close(const std::pair<double, double> &pos) const
-	{
-		double d1 = this->coordinate.first - pos.first;
-		double d2 = this->coordinate.second - pos.second;
-		return std::sqrt(d1 * d1 + d2 * d2) < 0.5;
-	}
+	// Town
+	////////////////////////////////////////////////////////////////////////////////////////
+
+	// A dummy variable as a default value.
+	Town nowhere;
 
 
+	////////////////////////////////////////////////////////////////////////////////////////
+	// Traveler
 	class Traveler
 	{
 	public:
@@ -216,21 +219,18 @@ namespace Travel
 
 		// properties (never changed)
 		const std::string &name = this->name_;
-		double &speed_cruise = this->speed_cruise_;
+		const double &speed_cruise = this->speed_cruise_;
 
 		// (occasionally changed) status
-		//LLCoordinate destination;
 		std::reference_wrapper<Town> last_town;
-		std::chrono::system_clock::time_point last_depart_time;
-		std::reference_wrapper<const Town> next_town;
+		std::reference_wrapper<Town> next_town;
 		bool parked;
 
 		// (real-time) status
-		//double bearing_now;
 		const std::pair<double, double> &coordinates = this->coordinates_;
 		double &latitude = this->coordinates_.first;
 		double &longitude = this->coordinates_.second;
-		double speed = 0.0;		// (km/hr)
+		double speed = 0.0;		// (km/h)
 		std::chrono::system_clock::time_point time_last;
 
 		// operators.
@@ -239,27 +239,36 @@ namespace Travel
 		// actions.
 		bool anchor(Town &town);
 		void depart(void);
-		void leave_for(const Town &town);
-		//void move(const LLCoordinate &pos);
+		void leave_for(Town &town);
 		void update(void);
+
 	protected:
 		// properties (never changed)
 		std::string name_ = "unknown";
-		double speed_cruise_ = 0.0;		// (km/hr)
+		double speed_cruise_ = 0.0;		// (km/h) ???
 
 		// (real-time) status
 		std::pair<double, double> coordinates_;
 	};
 
-	Traveler::Traveler(const Traveler &src) : last_town(src.last_town),
-		last_depart_time(src.last_depart_time), next_town(src.next_town),
-		parked(src.parked), name_(src.name_), speed_cruise_(src.speed_cruise_),
+	Traveler::Traveler(const Traveler &src) :
+		last_town(src.last_town),
+		next_town(src.next_town),
+		parked(src.parked),
+		speed(src.speed),
+		time_last(src.time_last),
+		name_(src.name_),
+		speed_cruise_(src.speed_cruise_),
 		coordinates_(src.coordinates_) {}
 
-	Traveler::Traveler(Traveler &&src) : last_town(std::move(src.last_town)),
-		last_depart_time(std::move(src.last_depart_time)),
-		next_town(std::move(src.next_town)), parked(src.parked),
-		name_(std::move(src.name_)), speed_cruise_(src.speed_cruise_),
+	Traveler::Traveler(Traveler &&src) :
+		last_town(std::move(src.last_town)),
+		next_town(std::move(src.next_town)),
+		parked(src.parked),
+		speed(src.speed),
+		time_last(std::move(src.time_last)),
+		name_(std::move(src.name_)),
+		speed_cruise_(src.speed_cruise_),
 		coordinates_(std::move(src.coordinates_)) {}
 
 	Traveler::Traveler(const std::string &name) : last_town(nowhere), next_town(nowhere),
@@ -273,13 +282,16 @@ namespace Travel
 
 	bool Traveler::anchor(Town &town)
 	{
-		// Traveler must be close to the town, and parking must be available at the town.
-		if (town.is_close(this->coordinates) && town.can_park)
+		// Traveler must be close to the town, and parking must be available at the town.		
+		if (get_distance(this->latitude, this->longitude, town.latitude, town.longitude) < 100.0 &&
+			town.can_park)
 		{
 			this->last_town = town;
+			this->speed = 0;
+			this->time_last = std::chrono::system_clock::now();
 			this->parked = true;
 			this->coordinates_ = town.coordinate;
-			town.travlers.push_back(*this);
+			town.travelers.push_back(*this);
 			return true;
 		}
 		return false;
@@ -290,44 +302,55 @@ namespace Travel
 		if (this->parked)
 		{	// Undo anchor().
 			Town &town = this->last_town.get();
-			town.travlers.remove_if([this](const Traveler &tv){ return tv == *this; });
-			this->last_depart_time = std::chrono::system_clock::now();
+			town.travelers.remove_if([this](const Traveler &tv){ return tv == *this; });
 			this->parked = false;
 		}
 		// No change, if not parked to a town.
 	}
 
-	void Traveler::leave_for(const Town &dst)
+	void Traveler::leave_for(Town &dst)
 	{
 		this->depart();
 		this->next_town = dst;
 		this->time_last = std::chrono::system_clock::now();
-		this->speed = this->speed_cruise;
 
 		//auto &orgn = this->last_town.get();
 		//double dist = orgn.distance_to(dst);			// (km)
-		//double time_est = dist / this->speed_cruise;	// (hr)
+		//double time_est = dist / this->speed_cruise;	// (sim hour)
 	}
 
 	void Traveler::update(void)
 	{
-		// Get new coordinates from {speed, time_last, now(), bearing, coordinates}.
-		auto now = std::chrono::system_clock::now();
-		auto t = this->time_last - now;
-		auto hrs_sys = std::chrono::duration<double, std::ratio<3600>>(t);	// sec -> hrs
-		auto hrs = hrs_sys.count() * TIME_FACTOR;			// (sim hrs)
-		auto distance = this->speed * hrs;			// (km)
+		if (!this->parked)
+		{
+			// Compute the distance from the origin based on the time since the beginning of the move and the constant speed.
+			// TODO: This assumes a constant speed. What if the speed change?
+			auto now = std::chrono::system_clock::now();
+			auto t = std::chrono::duration<double>(now - this->time_last);	// (sec)
+			auto hours = t.count() * TIME_FACTOR / 3600.0;	// (sec) -> (sim hour)
+			auto distance = this->speed * hours;			// (km)
 
-		// Update time_last, coordinates_
-		this->time_last = now;
-		auto dst = this->next_town.get();
-		std::pair<double, double> pos_now;
-		double azimuth;
-		get_pos_LL(this->latitude, this->longitude, dst.latitude, dst.longitude, this->speed, hrs, pos_now.first, pos_now.second, azimuth);
-		this->coordinates_ = pos_now;
+			// Compute current coordinates and update it.
+			auto &orgn = this->last_town.get();
+			auto &dst = this->next_town.get();
+			double lat, lon, azi;
+			get_position(orgn.latitude, orgn.longitude, dst.latitude, dst.longitude, distance,
+				lat, lon, azi);
+			this->latitude = lat;
+			this->longitude = lon;
+
+			// Try to park at every opportunity.
+			this->anchor(dst);
+		}
+		// No change, if parked to a town.
 	}
 
+	// Traveler
+	////////////////////////////////////////////////////////////////////////////////////////
 
+
+	////////////////////////////////////////////////////////////////////////////////////////
+	// World
 	class World
 	{
 	public:		
@@ -363,8 +386,10 @@ namespace Travel
 
 	void World::update_travelers(void)
 	{
-		for (Traveler &tv : this->travelers)
-			tv.update();
+		for (auto &traveler : this->travelers)
+			traveler.update();
 	}
+	// World
+	////////////////////////////////////////////////////////////////////////////////////////
 }
 #endif
