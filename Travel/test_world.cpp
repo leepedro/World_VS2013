@@ -56,7 +56,7 @@ void run_serial(Travel::World &world, Travel::Traveler &traveler1, Travel::Trave
 		std::clog << traveler1.name << " has NOT arrived at " << traveler1.next_town.get().name << std::endl;
 }
 
-// Use async for each traveler.
+// Use async for timer and each traveler.
 void run_parallel_async(Travel::World &world, Travel::Traveler &traveler1, Travel::Traveler &traveler2, Travel::Town &town1, Travel::Town &town2)
 {
 	std::cout << std::endl << "Use std::async for timer and each traveler." << std::endl << std::endl;
@@ -79,11 +79,11 @@ void run_parallel_async(Travel::World &world, Travel::Traveler &traveler1, Trave
 	while (stop.wait_for(std::chrono::milliseconds(1)) != std::future_status::ready)
 		world.update_travelers();
 
+	h1.wait();
 	if (traveler1.parked)
 		std::clog << traveler1.name << " has arrived at " << traveler1.last_town.get().name << std::endl;
 	else
 		std::clog << traveler1.name << " has NOT arrived at " << traveler1.next_town.get().name << std::endl;
-	h1.wait();
 
 	if (h2.get())
 		std::clog << traveler2.name << " is parked at " << traveler2.last_town.get().name << std::endl;
@@ -114,17 +114,17 @@ void run_parallel_thread(Travel::World &world, Travel::Traveler &traveler1, Trav
 	while (stop.wait_for(std::chrono::milliseconds(1)) != std::future_status::ready)
 		world.update_travelers();
 
+	th1.join();
 	if (traveler1.parked)
 		std::clog << traveler1.name << " has arrived at " << traveler1.last_town.get().name << std::endl;
 	else
 		std::clog << traveler1.name << " has NOT arrived at " << traveler1.next_town.get().name << std::endl;
-	th1.join();
 
+	th2.join();
 	if (traveler2.parked)
 		std::clog << traveler2.name << " is parked at " << traveler2.last_town.get().name << std::endl;
 	else
 		std::clog << traveler2.name << " is NOT parked at " << traveler2.next_town.get().name << std::endl;
-	th2.join();
 }
 
 

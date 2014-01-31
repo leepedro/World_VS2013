@@ -219,20 +219,19 @@ namespace Travel
 
 		// properties (never changed)
 		const std::string &name = this->name_;
-		const double &speed_cruise = this->speed_cruise_;
 
 		// (occasionally changed) status
 		//double dist_est;	// (km)
 		std::reference_wrapper<Town> last_town;
 		std::reference_wrapper<Town> next_town;
-		double odometer_plan;	// (km)
+		double distance_plan;	// (km)
 		bool parked;
 
 		// (real-time) status
 		const std::pair<double, double> &coordinates = this->coordinates_;
-		double odometer_count;	// accumulated distance (km)
 		double &latitude = this->coordinates_.first;
 		double &longitude = this->coordinates_.second;
+		double distance_moved;	// accumulated distance (km)
 		double speed = 0.0;		// (km/h)
 		std::chrono::system_clock::time_point time_last;
 
@@ -248,7 +247,6 @@ namespace Travel
 	protected:
 		// properties (never changed)
 		std::string name_ = "unknown";
-		double speed_cruise_ = 0.0;		// (km/h) ???
 
 		// (real-time) status
 		std::pair<double, double> coordinates_;
@@ -257,21 +255,23 @@ namespace Travel
 	Traveler::Traveler(const Traveler &src) :
 		last_town(src.last_town),
 		next_town(src.next_town),
+		distance_plan(src.distance_plan),
 		parked(src.parked),
+		distance_moved(src.distance_moved),
 		speed(src.speed),
 		time_last(src.time_last),
 		name_(src.name_),
-		speed_cruise_(src.speed_cruise_),
 		coordinates_(src.coordinates_) {}
 
 	Traveler::Traveler(Traveler &&src) :
 		last_town(std::move(src.last_town)),
 		next_town(std::move(src.next_town)),
+		distance_plan(distance_plan),
 		parked(src.parked),
+		distance_moved(src.distance_moved),
 		speed(src.speed),
 		time_last(std::move(src.time_last)),
 		name_(std::move(src.name_)),
-		speed_cruise_(src.speed_cruise_),
 		coordinates_(std::move(src.coordinates_)) {}
 
 	Traveler::Traveler(const std::string &name) : last_town(nowhere), next_town(nowhere),
@@ -286,12 +286,11 @@ namespace Travel
 	bool Traveler::anchor(Town &town)
 	{
 		// Traveler must be close to the town, and parking must be available at the town.		
-		if (get_distance(this->latitude, this->longitude, town.latitude, town.longitude) < 100.0 &&
+		if (get_distance(this->latitude, this->longitude, town.latitude, town.longitude) < 50.0 &&
 			town.can_park)
 		{
 			this->last_town = town;
 			this->speed = 0;
-			//this->time_last = std::chrono::system_clock::now();
 			this->parked = true;
 			this->coordinates_ = town.coordinate;
 			town.travelers.push_back(*this);
@@ -317,8 +316,8 @@ namespace Travel
 		this->next_town = dst;
 		this->time_last = std::chrono::system_clock::now();
 		auto &orgn = this->last_town.get();
-		this->odometer_plan = orgn.distance_to(dst);			// (km)
-		this->odometer_count = 0;								// (km)
+		this->distance_plan = orgn.distance_to(dst);			// (km)
+		this->distance_moved = 0;								// (km)
 		//double time_est = dist / this->speed_cruise;	// (sim hour)
 	}
 
@@ -326,19 +325,20 @@ namespace Travel
 	{
 		if (!this->parked)
 		{
-			// Compute the advanced distance since last update with the current speed.
+			// Compute the advanced distance since the last update with the current speed.
 			auto now = std::chrono::system_clock::now();
 			auto t = std::chrono::duration<double>(now - this->time_last);	// (sec)
 			auto hours = t.count() * TIME_FACTOR / 3600.0;	// (sec) -> (sim hour)
 			auto distance = this->speed * hours;			// (km)
-			this->odometer_count += distance;				// accumulated distance
+			this->distance_moved += distance;				// accumulated distance
 			this->time_last = now;
+			//double progress = this->distance_moved / this->distance_plan;
 
 			// Compute current coordinates and update it.
 			auto &orgn = this->last_town.get();
 			auto &dst = this->next_town.get();
 			double lat, lon, azi;
-			get_position(orgn.latitude, orgn.longitude, dst.latitude, dst.longitude, this->odometer_count,
+			get_position(orgn.latitude, orgn.longitude, dst.latitude, dst.longitude, this->distance_moved,
 				lat, lon, azi);
 			this->latitude = lat;
 			this->longitude = lon;
